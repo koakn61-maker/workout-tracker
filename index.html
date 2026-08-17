@@ -40,7 +40,11 @@ canvas{width:100%;height:230px;border:1px solid #e5e7eb;border-radius:10px}
 <h2>トレーニングを記録</h2>
 <div class="grid">
 <div class="full"><label>日付</label><input id="date" type="date"></div>
-<div class="full"><label>種目</label><input id="exercise" list="exerciseList" placeholder="例：ベンチプレス"><datalist id="exerciseList"></datalist></div>
+<div class="full">
+<label>種目</label>
+<select id="exerciseSelect"></select>
+<input id="newExercise" placeholder="新しい種目を入力（初回だけ）" style="margin-top:8px;display:none">
+</div>
 <div><label>重量（kg）</label><input id="weight" type="number" min="0" step="0.5" placeholder="60"></div>
 <div><label>回数</label><input id="reps" type="number" min="1" step="1" placeholder="10"></div>
 <div><label>セット数</label><input id="sets" type="number" min="1" step="1" placeholder="3"></div>
@@ -71,9 +75,15 @@ $("date").value=new Date().toISOString().slice(0,10);
 
 function save(){localStorage.setItem(KEY,JSON.stringify(records));}
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+function exerciseNames(){return [...new Set(records.map(r=>r.exercise).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));}
+function renderExerciseSelect(){
+ const sel=$("exerciseSelect"), names=exerciseNames(), current=sel.value;
+ sel.innerHTML='<option value="">種目を選択</option>'+names.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("")+'<option value="__new__">＋ 新しい種目を入力</option>';
+ if(names.includes(current)) sel.value=current;
+ else if(current==="__new__") sel.value="__new__";
+}
 function render(){
- const names=[...new Set(records.map(r=>r.exercise))].sort();
- $("exerciseList").innerHTML=names.map(x=>`<option value="${esc(x)}">`).join("");
+ renderExerciseSelect();
  renderToday(); renderHistory(); renderStats();
 }
 function renderToday(){
@@ -107,7 +117,23 @@ function drawChart(){
  ctx.beginPath();a.forEach((r,i)=>{let x=L+(a.length===1?pw/2:pw*i/(a.length-1)),y=T+ph-(r.weight-min)/range*ph;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.strokeStyle="#111827";ctx.lineWidth=3;ctx.stroke();
  a.forEach((r,i)=>{let x=L+(a.length===1?pw/2:pw*i/(a.length-1)),y=T+ph-(r.weight-min)/range*ph;ctx.fillStyle="#111827";ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill();if(i===a.length-1){ctx.fillStyle="#111827";ctx.textAlign="center";ctx.font="11px sans-serif";ctx.fillText(r.weight+"kg",x,y-10);}});
 }
-$("save").onclick=()=>{let date=$("date").value,exercise=$("exercise").value.trim(),weight=+$("weight").value,reps=+$("reps").value,sets=+$("sets").value;if(!date||!exercise||!(weight>0)||!(reps>0)||!(sets>0)){alert("日付・種目・重量・回数・セット数を入力してください");return}records.push({id:Date.now(),date,exercise,weight,reps,sets});save();$("weight").value="";$("reps").value="";$("sets").value="";render();};
+$("exerciseSelect").onchange=()=>{
+ $("newExercise").style.display=$("exerciseSelect").value==="__new__"?"block":"none";
+};
+$("save").onclick=()=>{
+ let date=$("date").value, exercise=$("exerciseSelect").value;
+ if(exercise==="__new__") exercise=$("newExercise").value.trim();
+ let weight=+$("weight").value,reps=+$("reps").value,sets=+$("sets").value;
+ if(!date||!exercise||!(weight>0)||!(reps>0)||!(sets>0)){
+   alert("日付・種目・重量・回数・セット数を入力してください");return;
+ }
+ records.push({id:Date.now(),date,exercise,weight,reps,sets});save();
+ $("weight").value="";$("reps").value="";$("sets").value="";
+ $("newExercise").value="";
+ render();
+ $("exerciseSelect").value=exercise;
+ $("newExercise").style.display="none";
+};
 $("date").onchange=renderToday;$("chartExercise").onchange=drawChart;
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");["log","history","stats"].forEach(id=>$(id).classList.toggle("hidden",id!==b.dataset.tab));if(b.dataset.tab==="stats")drawChart();});
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
