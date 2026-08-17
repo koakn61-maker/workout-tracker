@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.json">
+<title>筋トレ記録</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#f3f4f6;color:#111827}
+header{background:#111827;color:white;padding:22px 18px 18px;position:sticky;top:0;z-index:5}
+h1{font-size:23px;margin:0}.sub{opacity:.7;font-size:12px;margin-top:4px}
+main{max-width:760px;margin:auto;padding:14px 14px 90px}
+.card{background:white;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px #0000000d}
+h2{font-size:17px;margin:0 0 12px}
+label{font-size:12px;color:#6b7280;display:block;margin-bottom:5px}
+input,select,button{font:inherit}input,select{width:100%;padding:12px;border:1px solid #d1d5db;border-radius:10px;background:white}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.full{grid-column:1/-1}
+button{border:0;border-radius:10px;padding:12px 16px;cursor:pointer}
+.primary{background:#111827;color:white;width:100%;font-weight:700;margin-top:12px}.danger{background:#fee2e2;color:#991b1b}.small{padding:7px 10px;font-size:12px}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}.tab{background:#e5e7eb}.tab.active{background:#111827;color:#fff}
+.hidden{display:none}.record{border-top:1px solid #e5e7eb;padding:12px 0}.record:first-child{border-top:0}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center}.muted{color:#6b7280;font-size:12px}.big{font-size:20px;font-weight:800}
+.badge{display:inline-block;background:#ecfdf5;color:#047857;padding:4px 7px;border-radius:999px;font-size:11px;margin-left:5px}
+canvas{width:100%;height:230px;border:1px solid #e5e7eb;border-radius:10px}
+.empty{text-align:center;color:#9ca3af;padding:25px 5px}
+</style>
+</head>
+<body>
+<header><h1>💪 筋トレ記録</h1><div class="sub">シンプルに、伸びを記録する</div></header>
+<main>
+<div class="tabs">
+<button class="tab active" data-tab="log">記録</button>
+<button class="tab" data-tab="history">履歴</button>
+<button class="tab" data-tab="stats">自己ベスト・グラフ</button>
+</div>
+
+<section id="log">
+<div class="card">
+<h2>トレーニングを記録</h2>
+<div class="grid">
+<div class="full"><label>日付</label><input id="date" type="date"></div>
+<div class="full"><label>種目</label><input id="exercise" list="exerciseList" placeholder="例：ベンチプレス"><datalist id="exerciseList"></datalist></div>
+<div><label>重量（kg）</label><input id="weight" type="number" min="0" step="0.5" placeholder="60"></div>
+<div><label>回数</label><input id="reps" type="number" min="1" step="1" placeholder="10"></div>
+<div><label>セット数</label><input id="sets" type="number" min="1" step="1" placeholder="3"></div>
+</div>
+<button class="primary" id="save">記録する</button>
+</div>
+<div class="card"><h2>今日の記録</h2><div id="todayRecords"></div></div>
+</section>
+
+<section id="history" class="hidden">
+<div class="card"><h2>日付ごとの記録</h2><div id="historyRecords"></div></div>
+</section>
+
+<section id="stats" class="hidden">
+<div class="card"><h2>自己ベスト</h2><div id="bestList"></div></div>
+<div class="card">
+<h2>重量の伸び</h2>
+<label>種目</label><select id="chartExercise"></select>
+<canvas id="chart" width="700" height="300"></canvas>
+</div>
+</section>
+</main>
+<script>
+const KEY="workout_records_v1";
+let records=JSON.parse(localStorage.getItem(KEY)||"[]");
+const $=id=>document.getElementById(id);
+$("date").value=new Date().toISOString().slice(0,10);
+
+function save(){localStorage.setItem(KEY,JSON.stringify(records));}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+function render(){
+ const names=[...new Set(records.map(r=>r.exercise))].sort();
+ $("exerciseList").innerHTML=names.map(x=>`<option value="${esc(x)}">`).join("");
+ renderToday(); renderHistory(); renderStats();
+}
+function renderToday(){
+ const d=$("date").value, a=records.filter(r=>r.date===d).sort((x,y)=>y.id-x.id);
+ $("todayRecords").innerHTML=a.length?a.map(r=>recordHTML(r,true)).join(""):'<div class="empty">まだ記録がありません</div>';
+}
+function recordHTML(r,del){
+ return `<div class="record"><div class="row"><div><b>${esc(r.exercise)}</b><div class="muted">${r.weight} kg × ${r.reps}回 × ${r.sets}セット</div></div>${del?`<button class="danger small" onclick="removeRecord(${r.id})">削除</button>`:""}</div></div>`;
+}
+function removeRecord(id){records=records.filter(r=>r.id!==id);save();render();}
+function renderHistory(){
+ const groups={}; [...records].sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id).forEach(r=>(groups[r.date]??=[]).push(r));
+ const keys=Object.keys(groups);
+ $("historyRecords").innerHTML=keys.length?keys.map(d=>`<div class="record"><div class="row"><b>${d}</b><span class="muted">${groups[d].length}件</span></div>${groups[d].map(r=>recordHTML(r,false)).join("")}</div>`).join(""):'<div class="empty">記録がありません</div>';
+}
+function renderStats(){
+ const map={}; records.forEach(r=>{map[r.exercise]=Math.max(map[r.exercise]||0,+r.weight)});
+ const names=Object.keys(map).sort();
+ $("bestList").innerHTML=names.length?names.map(n=>`<div class="record"><div class="row"><div><b>${esc(n)}</b></div><div class="big">${map[n]} kg</div></div></div>`).join(""):'<div class="empty">記録すると自己ベストが表示されます</div>';
+ const sel=$("chartExercise"), old=sel.value; sel.innerHTML=names.map(n=>`<option>${esc(n)}</option>`).join(""); if(names.includes(old))sel.value=old; drawChart();
+}
+function drawChart(){
+ const c=$("chart"),ctx=c.getContext("2d"),dpr=devicePixelRatio||1;
+ const w=c.clientWidth||700,h=230;c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+ const ex=$("chartExercise").value;if(!ex){ctx.fillStyle="#9ca3af";ctx.textAlign="center";ctx.fillText("記録するとグラフが表示されます",w/2,h/2);return;}
+ const a=records.filter(r=>r.exercise===ex).sort((x,y)=>x.date.localeCompare(y.date)||x.id-y.id);
+ if(!a.length)return; const max=Math.max(...a.map(r=>+r.weight)), min=Math.min(...a.map(r=>+r.weight)), range=max-min||1;
+ const L=42,R=15,T=20,B=35,pw=w-L-R,ph=h-T-B;
+ ctx.strokeStyle="#e5e7eb";ctx.lineWidth=1;for(let i=0;i<5;i++){let y=T+ph*i/4;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();}
+ ctx.fillStyle="#6b7280";ctx.font="11px sans-serif";ctx.textAlign="right";ctx.fillText(max+"kg",L-6,T+4);ctx.fillText(min+"kg",L-6,T+ph);
+ ctx.beginPath();a.forEach((r,i)=>{let x=L+(a.length===1?pw/2:pw*i/(a.length-1)),y=T+ph-(r.weight-min)/range*ph;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.strokeStyle="#111827";ctx.lineWidth=3;ctx.stroke();
+ a.forEach((r,i)=>{let x=L+(a.length===1?pw/2:pw*i/(a.length-1)),y=T+ph-(r.weight-min)/range*ph;ctx.fillStyle="#111827";ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill();if(i===a.length-1){ctx.fillStyle="#111827";ctx.textAlign="center";ctx.font="11px sans-serif";ctx.fillText(r.weight+"kg",x,y-10);}});
+}
+$("save").onclick=()=>{let date=$("date").value,exercise=$("exercise").value.trim(),weight=+$("weight").value,reps=+$("reps").value,sets=+$("sets").value;if(!date||!exercise||!(weight>0)||!(reps>0)||!(sets>0)){alert("日付・種目・重量・回数・セット数を入力してください");return}records.push({id:Date.now(),date,exercise,weight,reps,sets});save();$("weight").value="";$("reps").value="";$("sets").value="";render();};
+$("date").onchange=renderToday;$("chartExercise").onchange=drawChart;
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");["log","history","stats"].forEach(id=>$(id).classList.toggle("hidden",id!==b.dataset.tab));if(b.dataset.tab==="stats")drawChart();});
+if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+render();
+</script>
+</body>
+</html>
